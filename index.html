@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Validación de Certificado</title>
+    <style>
+        :root {
+            --primary: #1e3a8a; /* Indigo 900 */
+            --secondary: #3b82f6; /* Blue 500 */
+            --success: #10b981; /* Emerald 500 */
+            --error: #ef4444; /* Red 500 */
+            --background: #f8fafc; /* Slate 50 */
+            --surface: #ffffff;
+            --text: #334155; /* Slate 700 */
+            --text-light: #64748b; /* Slate 500 */
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--background);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: var(--surface);
+            max-width: 600px;
+            width: 100%;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            padding: 30px 20px;
+            text-align: center;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px 30px;
+        }
+
+        .status-box {
+            text-align: center;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            display: none;
+        }
+
+        .status-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .valid {
+            background-color: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            color: #065f46;
+        }
+
+        .invalid {
+            background-color: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+        }
+
+        .loading {
+            background-color: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1e40af;
+        }
+
+        .data-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+            display: none;
+        }
+
+        @media (min-width: 480px) {
+            .data-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .data-item {
+            background: #f8fafc;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .data-item-full {
+            grid-column: 1 / -1;
+        }
+
+        .label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-light);
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+
+        .value {
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text);
+            word-break: break-word;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            border-top: 1px solid #e2e8f0;
+            color: var(--text-light);
+            font-size: 0.85rem;
+            background: #f8fafc;
+        }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(59, 130, 246, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--secondary);
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 15px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>Sistema de Validación</h1>
+            <p>Verificación de Certificados y Credenciales</p>
+        </div>
+
+        <div class="content">
+            <div id="statusLoading" class="status-box loading" style="display: block;">
+                <div class="spinner"></div>
+                <h2>Verificando...</h2>
+                <p>Comprobando la autenticidad del documento.</p>
+            </div>
+
+            <div id="statusValid" class="status-box valid">
+                <div class="status-icon">✅</div>
+                <h2>Certificado Auténtico</h2>
+                <p>La firma criptográfica es válida y los datos no han sido alterados.</p>
+            </div>
+
+            <div id="statusInvalid" class="status-box invalid">
+                <div class="status-icon">❌</div>
+                <h2>Certificado Inválido o Alterado</h2>
+                <p id="errorMsg">La firma no coincide o los datos han sido modificados. Este documento no es reconocido como oficial.</p>
+            </div>
+
+            <div id="certData" class="data-grid">
+                <!-- Data will be injected here -->
+            </div>
+        </div>
+
+        <div class="footer">
+            Protegido criptográficamente mediante ECDSA (P-256)
+        </div>
+    </div>
+
+    <script>
+        // Utilidades Base64URL
+        function base64UrlDecode(str) {
+            let padding = '='.repeat((4 - str.length % 4) % 4);
+            let base64 = (str + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            let raw = atob(base64);
+            let output = new Uint8Array(raw.length);
+            for (let i = 0; i < raw.length; ++i) {
+                output[i] = raw.charCodeAt(i);
+            }
+            return output;
+        }
+
+        function base64UrlToString(str) {
+            let bytes = base64UrlDecode(str);
+            return new TextDecoder().decode(bytes);
+        }
+
+        // Convertir PEM Público a ArrayBuffer (DER)
+        function pemToArrayBuffer(pem) {
+            const b64Lines = pem.replace(/(-----(BEGIN|END) PUBLIC KEY-----|[\n\r])/g, '');
+            const b64Prefix = b64Lines.trim();
+            const binaryStr = atob(b64Prefix);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) {
+                bytes[i] = binaryStr.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        // Mostrar estado en UI
+        function showStatus(status, errorMsg = '') {
+            document.getElementById('statusLoading').style.display = 'none';
+            document.getElementById('statusValid').style.display = 'none';
+            document.getElementById('statusInvalid').style.display = 'none';
+            document.getElementById('certData').style.display = 'none';
+
+            if (status === 'valid') {
+                document.getElementById('statusValid').style.display = 'block';
+                document.getElementById('certData').style.display = 'grid';
+            } else if (status === 'invalid') {
+                document.getElementById('statusInvalid').style.display = 'block';
+                if (errorMsg) document.getElementById('errorMsg').innerText = errorMsg;
+            }
+        }
+
+        // Construir la tabla de datos
+        function renderData(dataObj) {
+            const grid = document.getElementById('certData');
+            
+            // Mapeo de claves cortas a etiquetas largas
+            const labels = {
+                's': 'Serial',
+                'n': 'Participante',
+                'c': 'Cédula / Identidad',
+                'a': 'Actividad',
+                't': 'Tipo',
+                'f': 'Fecha',
+                'h': 'Horas',
+                'e': 'Emisión'
+            };
+
+            const fullWidthKeys = ['a', 'n']; // Actividad y Nombre suelen ser largos
+
+            for (const [key, value] of Object.entries(dataObj)) {
+                if (!labels[key]) continue; // Ignorar campos desconocidos
+                
+                const item = document.createElement('div');
+                item.className = 'data-item';
+                if (fullWidthKeys.includes(key)) {
+                    item.classList.add('data-item-full');
+                }
+
+                item.innerHTML = `
+                    <div class="label">${labels[key]}</div>
+                    <div class="value">${value}</div>
+                `;
+                grid.appendChild(item);
+            }
+        }
+
+        async function validateCertificate() {
+            try {
+                // 1. Obtener parámetros de la URL
+                const urlParams = new URLSearchParams(window.location.search);
+                const dataParam = urlParams.get('d');
+                const sigParam = urlParams.get('s');
+
+                if (!dataParam || !sigParam) {
+                    showStatus('invalid', 'URL inválida. Faltan datos o firma.');
+                    return;
+                }
+
+                // 2. Decodificar datos
+                const dataString = base64UrlToString(dataParam);
+                const dataObj = JSON.parse(dataString);
+                
+                // 3. Decodificar firma a Uint8Array
+                const signatureBuffer = base64UrlDecode(sigParam);
+
+                // 4. Descargar Llave Pública
+                const response = await fetch('public_key.pem');
+                if (!response.ok) {
+                    showStatus('invalid', 'No se pudo cargar la llave pública del servidor.');
+                    return;
+                }
+                const pemText = await response.text();
+
+                // 5. Importar Llave Pública para WebCrypto
+                const pubKeyBuffer = pemToArrayBuffer(pemText);
+                const cryptoKey = await window.crypto.subtle.importKey(
+                    "spki",
+                    pubKeyBuffer,
+                    {
+                        name: "ECDSA",
+                        namedCurve: "P-256"
+                    },
+                    false,
+                    ["verify"]
+                );
+
+                // 6. Verificar Firma
+                // Nota: crypto.subtle requiere los datos originales codificados
+                const encoder = new TextEncoder();
+                const dataBuffer = encoder.encode(dataString);
+
+                const isValid = await window.crypto.subtle.verify(
+                    {
+                        name: "ECDSA",
+                        hash: {name: "SHA-256"},
+                    },
+                    cryptoKey,
+                    signatureBuffer,
+                    dataBuffer
+                );
+
+                if (isValid) {
+                    renderData(dataObj);
+                    showStatus('valid');
+                } else {
+                    showStatus('invalid', 'La firma criptográfica no es válida. El documento fue alterado o es falso.');
+                }
+
+            } catch (error) {
+                console.error("Error validando:", error);
+                showStatus('invalid', 'Error técnico durante la validación: ' + error.message);
+            }
+        }
+
+        // Iniciar validación al cargar
+        window.addEventListener('load', validateCertificate);
+    </script>
+</body>
+</html>
